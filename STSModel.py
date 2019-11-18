@@ -1,5 +1,7 @@
 import sys
+from collections import defaultdict
 
+import spacy
 from nltk import pos_tag
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
@@ -10,12 +12,21 @@ class CorpusReader:
 
     def __init__(self):
         self.data = []
+        self.synsets = defaultdict(set)
+        self.hypernyms = defaultdict(set)
+        self.hyponyms = defaultdict(set)
+        self.meronyms = defaultdict(set)
+        self.holonyms = defaultdict(set)
+        self.res = dict()
 
     def read_data(self, input_file):
         with open(input_file, 'r', encoding='utf8') as data:
             lines = data.read().splitlines()
         for line in lines:
             self.data.append(line.split("\t"))
+
+    def model_init(self):
+        pass
 
     def tokenise(self, sentence):
         return (word_tokenize(sentence))
@@ -43,11 +54,55 @@ class CorpusReader:
     def sentence_length(self, sentence):
         return len(self.tokenise(sentence))
 
-    def wordnet_features(self):
-        pass
+    def wordnet_features(self, sentence):
+        tokenized_words = self.tokenise(sentence)
+        for word in tokenized_words:
+            temp_synset = wordnet.synsets(word)
+            for temp_word in temp_synset:
+                self.synsets[word].add(temp_word)
+            for each_elem in temp_synset:
+                temp_hypernyms = each_elem.hypernyms()
+                for hypernym in temp_hypernyms:
+                    self.hypernyms[each_elem].add(hypernym)
+
+                temp_hyponyms = each_elem.hyponyms()
+                for hyponyms in temp_hyponyms:
+                    self.hyponyms[each_elem].add(hyponyms)
+
+                temp_meronyms = each_elem.part_meronyms()
+                for meronyms in temp_meronyms:
+                    self.meronyms[each_elem].add(meronyms)
+                temp_meronyms = each_elem.substance_meronyms()
+                for meronyms in temp_meronyms:
+                    self.meronyms[each_elem].add(meronyms)
+
+                temp_holonyms = each_elem.part_holonyms()
+                for holonyms in temp_holonyms:
+                    self.holonyms[each_elem].add(holonyms)
+                temp_holonyms = each_elem.substance_holonyms()
+                for holonyms in temp_holonyms:
+                    self.holonyms[each_elem].add(holonyms)
+
+        print("\nSynsets\t", "--" * 10)
+        for key in self.synsets:
+            print(key, self.synsets[key])
+
+        print("\n\nHypernyms\t", "--" * 10)
+        for key in self.hypernyms:
+            print(key, self.hypernyms[key])
+
+        print("\n\nHyponyms\t", "--" * 10)
+        for key in self.meronyms:
+            print(key, self.meronyms[key])
+
+        print("\n\nHolonyms\t", "--" * 10)
+        for key in self.holonyms:
+            print(key, self.holonyms[key])
 
     def parse_tree(self):
-        pass
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp("John are best boys")
+        spacy.displacy.serve(doc, style="dep")
 
 
 if __name__ == "__main__":
@@ -57,7 +112,7 @@ if __name__ == "__main__":
     input_file = sys.argv[1]
     reader = CorpusReader()
     reader.read_data(input_file)
-    # print(reader.data)
+    print(reader.data)
     while True:
         print("Choose from the following options:")
         print("1. Tokenize sentence")
@@ -69,7 +124,7 @@ if __name__ == "__main__":
         print("7. Continue with model")
         option = int(input("Option? "))
         if option in range(0, 7):
-            sentence = input("Please enter the sentence ")
+            sentence = input("Please enter the sentence ").lower()
             if option == 1:
                 print(reader.tokenise(sentence))
             elif option == 2:
@@ -79,9 +134,11 @@ if __name__ == "__main__":
             elif option == 4:
                 print(reader.parse_tree())
             elif option == 5:
-                print(reader.wordnet_features())
+                print(reader.wordnet_features(sentence))
             elif option == 6:
                 print(reader.sentence_length(sentence))
+            elif option == 7:
+                reader.model_init()
             else:
                 exit(0)
         else:
