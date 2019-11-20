@@ -1,8 +1,10 @@
+import string
 import sys
 from collections import defaultdict
 
 import spacy
 from nltk import pos_tag
+from nltk.corpus import stopwords
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
@@ -18,6 +20,7 @@ class CorpusReader:
         self.meronyms = defaultdict(set)
         self.holonyms = defaultdict(set)
         self.res = dict()
+        self.stopwords = set(stopwords.words('english'))
 
     def read_data(self, input_file):
         with open(input_file, 'r', encoding='utf8') as data:
@@ -25,14 +28,46 @@ class CorpusReader:
         for line in lines:
             self.data.append(line.split("\t"))
 
+    def preprocess_data(self):
+        for index in range(len(self.data)):
+            data = self.data[index]
+            sent1_nopunch = data[1].translate(str.maketrans('', '', string.punctuation)).lower()
+            sent2_nopunch = data[2].translate(str.maketrans('', '', string.punctuation)).lower()
+
+            filtered_token1, filtered_token2 = [], []
+            sentence1_tokens = self.tokenise(sent1_nopunch)
+            sentence2_tokens = self.tokenise(sent2_nopunch)
+
+            # Lemmatizing, POS tagging and removing stop words
+            for token in sentence1_tokens:
+                if token not in self.stopwords:
+                    token = pos_tag(self.lematize(token, False))[0]
+                    filtered_token1.append(token)
+            for token in sentence2_tokens:
+                if token not in self.stopwords:
+                    token = pos_tag(self.lematize(token, False))[0]
+                    filtered_token2.append(token)
+            self.data[index][1] = filtered_token1
+            self.data[index][2] = filtered_token2
+
     def model_init(self):
-        pass
+        self.preprocess_data()
+        self.compare_sentence()
+        # print(reader.data)
+
+    def compare_sentence(self):
+        for data in self.data:
+            if len(data[1]) == len(data[2]) and data[1] == data[2]:
+                self.res.update({data[0], 5})
 
     def tokenise(self, sentence):
         return (word_tokenize(sentence))
 
-    def lematize(self, sentence):
-        tokenised_words = self.tokenise(sentence)
+    def lematize(self, sentence, is_sentence=True):
+        if is_sentence:
+            tokenised_words = self.tokenise(sentence)
+        else:
+            tokenised_words = [sentence]
         lemmatizer = WordNetLemmatizer()
         res = []
         tagged_word = pos_tag(tokenised_words)
@@ -99,9 +134,9 @@ class CorpusReader:
         for key in self.holonyms:
             print(key, self.holonyms[key])
 
-    def parse_tree(self):
+    def parse_tree(self, sentence):
         nlp = spacy.load("en_core_web_sm")
-        doc = nlp("John are best boys")
+        doc = nlp(sentence)
         spacy.displacy.serve(doc, style="dep")
 
 
@@ -109,7 +144,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Please provide the input file only")
         exit(0)
-    input_file = sys.argv[1]
+    input_file = "data/dev-set.txt"  # sys.argv[1]
     reader = CorpusReader()
     reader.read_data(input_file)
     print(reader.data)
@@ -132,14 +167,12 @@ if __name__ == "__main__":
             elif option == 3:
                 print(reader.pos_tagging(sentence, True))
             elif option == 4:
-                print(reader.parse_tree())
+                print(reader.parse_tree(sentence))
             elif option == 5:
                 print(reader.wordnet_features(sentence))
             elif option == 6:
                 print(reader.sentence_length(sentence))
-            elif option == 7:
-                reader.model_init()
-            else:
-                exit(0)
+        elif option == 7:
+            reader.model_init()
         else:
             print("Please select the correct option")
