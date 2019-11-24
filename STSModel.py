@@ -1,178 +1,74 @@
-import string
-import sys
-from collections import defaultdict
+import pandas as pd
+from gensim import corpora
+from gensim.similarities import Similarity
 
-import spacy
-from nltk import pos_tag
-from nltk.corpus import stopwords
-from nltk.corpus import wordnet
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+from PreprocessData import PreProcessData
 
 
-class CorpusReader:
+class STSModel:
 
-    def __init__(self):
+    def __init__(self, input_file):
         self.data = []
-        self.synsets = defaultdict(set)
-        self.hypernyms = defaultdict(set)
-        self.hyponyms = defaultdict(set)
-        self.meronyms = defaultdict(set)
-        self.holonyms = defaultdict(set)
         self.res = dict()
-        self.stopwords = set(stopwords.words('english'))
+        self.read_data(input_file)
+        self.preprocessdata_o = PreProcessData(self.data)
+        id = []
+        for data in self.data:
+            id.append(data[0])
+        self.feature = pd.DataFrame(id, columns=["id"])
 
     def read_data(self, input_file):
         with open(input_file, 'r', encoding='utf8') as data:
             lines = data.read().splitlines()
-        for line in lines:
+        for line in lines[1:]:
             self.data.append(line.split("\t"))
 
-    def preprocess_data(self):
-        for index in range(len(self.data)):
-            data = self.data[index]
-            sent1_nopunch = data[1].translate(str.maketrans('', '', string.punctuation)).lower()
-            sent2_nopunch = data[2].translate(str.maketrans('', '', string.punctuation)).lower()
+    def cosine_similarity(self):
+        cos_sim = []
 
-            filtered_token1, filtered_token2 = [], []
-            sentence1_tokens = self.tokenise(sent1_nopunch)
-            sentence2_tokens = self.tokenise(sent2_nopunch)
+        for data in self.data:
+            sent1 = [word[0] for word in data[1]]
+            sent2 = [word[0] for word in data[2]]
+            text = [sent1] + [sent2]
+            dict = corpora.Dictionary(text)
+            corpus = [dict.doc2bow(t) for t in text]
+            sim = Similarity('-Similarity-index', corpus, num_features= len(dict))
+            test_corpus_1 = dict.doc2bow(sent1)
+            cos_sim_each = sim[test_corpus_1][1]
+            cos_sim.append(cos_sim_each)
+        self.feature['cos_sim'] = cos_sim
 
-            # Lemmatizing, POS tagging and removing stop words
-            for token in sentence1_tokens:
-                if token not in self.stopwords:
-                    token = pos_tag(self.lematize(token, False))[0]
-                    filtered_token1.append(token)
-            for token in sentence2_tokens:
-                if token not in self.stopwords:
-                    token = pos_tag(self.lematize(token, False))[0]
-                    filtered_token2.append(token)
-            self.data[index][1] = filtered_token1
-            self.data[index][2] = filtered_token2
+
+    def jaccard_similarity(self):
+        jaccard_sim = []
+        for data in self.data:
+            intersection = len(set(data[1]).intersection(set(data[2])))
+            union = len(set(data[1]).union(set(data[2])))
+            jaccard_sim.append(intersection / union)
+        self.feature['jaccard_sim'] = jaccard_sim
 
     def model_init(self):
-        self.preprocess_data()
+        self.data = self.preprocessdata_o.preprocess_data()
+        self.cosine_similarity()
+        self.jaccard_similarity()
+        print(self.feature.head)
         self.compare_sentence()
-        # print(reader.data)
+
+    def sentence_length(self, sentence):
+        return len(self.preprocessdata_o.tokenise(sentence))
 
     def compare_sentence(self):
         for data in self.data:
             if len(data[1]) == len(data[2]) and data[1] == data[2]:
-                self.res.update({data[0], 5})
-
-    def tokenise(self, sentence):
-        return (word_tokenize(sentence))
-
-    def lematize(self, sentence, is_sentence=True):
-        if is_sentence:
-            tokenised_words = self.tokenise(sentence)
-        else:
-            tokenised_words = [sentence]
-        lemmatizer = WordNetLemmatizer()
-        res = []
-        tagged_word = pos_tag(tokenised_words)
-        tag_dict = {"J": wordnet.ADJ,
-                    "N": wordnet.NOUN,
-                    "V": wordnet.VERB,
-                    "R": wordnet.ADV}
-        for i in range(len(tokenised_words)):
-            res.append(
-                lemmatizer.lemmatize(tagged_word[i][0], tag_dict.get(tagged_word[i][1][0].upper(), wordnet.NOUN)))
-        return res
-
-    def pos_tagging(self, sentence, is_sentence=False):
-        if is_sentence:
-            return pos_tag(self.tokenise(sentence))
-        else:
-            return pos_tag(sentence)
-
-    def sentence_length(self, sentence):
-        return len(self.tokenise(sentence))
-
-    def wordnet_features(self, sentence):
-        tokenized_words = self.tokenise(sentence)
-        for word in tokenized_words:
-            temp_synset = wordnet.synsets(word)
-            for temp_word in temp_synset:
-                self.synsets[word].add(temp_word)
-            for each_elem in temp_synset:
-                temp_hypernyms = each_elem.hypernyms()
-                for hypernym in temp_hypernyms:
-                    self.hypernyms[each_elem].add(hypernym)
-
-                temp_hyponyms = each_elem.hyponyms()
-                for hyponyms in temp_hyponyms:
-                    self.hyponyms[each_elem].add(hyponyms)
-
-                temp_meronyms = each_elem.part_meronyms()
-                for meronyms in temp_meronyms:
-                    self.meronyms[each_elem].add(meronyms)
-                temp_meronyms = each_elem.substance_meronyms()
-                for meronyms in temp_meronyms:
-                    self.meronyms[each_elem].add(meronyms)
-
-                temp_holonyms = each_elem.part_holonyms()
-                for holonyms in temp_holonyms:
-                    self.holonyms[each_elem].add(holonyms)
-                temp_holonyms = each_elem.substance_holonyms()
-                for holonyms in temp_holonyms:
-                    self.holonyms[each_elem].add(holonyms)
-
-        print("\nSynsets\t", "--" * 10)
-        for key in self.synsets:
-            print(key, self.synsets[key])
-
-        print("\n\nHypernyms\t", "--" * 10)
-        for key in self.hypernyms:
-            print(key, self.hypernyms[key])
-
-        print("\n\nHyponyms\t", "--" * 10)
-        for key in self.meronyms:
-            print(key, self.meronyms[key])
-
-        print("\n\nHolonyms\t", "--" * 10)
-        for key in self.holonyms:
-            print(key, self.holonyms[key])
-
-    def parse_tree(self, sentence):
-        nlp = spacy.load("en_core_web_sm")
-        doc = nlp(sentence)
-        spacy.displacy.serve(doc, style="dep")
+                self.res.update({data[0]: 5})
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Please provide the input file only")
-        exit(0)
+    # if len(sys.argv) != 2:
+    #     print("Please provide the input file only")
+    #     exit(0)
     input_file = "data/dev-set.txt"  # sys.argv[1]
-    reader = CorpusReader()
-    reader.read_data(input_file)
-    print(reader.data)
-    while True:
-        print("Choose from the following options:")
-        print("1. Tokenize sentence")
-        print("2. Lemmatize sentence")
-        print("3. Find POS tag")
-        print("4. Get Parse tree")
-        print("5. Get wordnet features")
-        print("6. Length of sentence")
-        print("7. Continue with model")
-        option = int(input("Option? "))
-        if option in range(0, 7):
-            sentence = input("Please enter the sentence ").lower()
-            if option == 1:
-                print(reader.tokenise(sentence))
-            elif option == 2:
-                print(reader.lematize(sentence))
-            elif option == 3:
-                print(reader.pos_tagging(sentence, True))
-            elif option == 4:
-                print(reader.parse_tree(sentence))
-            elif option == 5:
-                print(reader.wordnet_features(sentence))
-            elif option == 6:
-                print(reader.sentence_length(sentence))
-        elif option == 7:
-            reader.model_init()
-        else:
-            print("Please select the correct option")
+    reader = STSModel(input_file)
+    # Task 1
+    reader.model_init()
+    print(reader.res)
