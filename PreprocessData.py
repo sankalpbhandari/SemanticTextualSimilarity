@@ -27,7 +27,8 @@ class PreProcessData:
             filtered_token1, filtered_token2 = [], []
             sentence1_tokens = self.tokenise(sent1_nopunch)
             sentence2_tokens = self.tokenise(sent2_nopunch)
-
+            self.wordnet_features(sent1_nopunch)
+            self.wordnet_features(sent2_nopunch)
             # Lemmatizing, POS tagging and removing stop words
             for token in sentence1_tokens:
                 if token not in self.stopwords:
@@ -67,50 +68,50 @@ class PreProcessData:
         else:
             return pos_tag(sentence)
 
-    def wordnet_features(self, sentence):
+    def wordnet_features(self, sentence, do_print=False):
         tokenized_words = self.tokenise(sentence)
         for word in tokenized_words:
             temp_synset = wordnet.synsets(word)
             for temp_word in temp_synset:
-                self.synsets[word].add(temp_word)
+                self.synsets[word].add(temp_word.name())
             for each_elem in temp_synset:
                 temp_hypernyms = each_elem.hypernyms()
                 for hypernym in temp_hypernyms:
-                    self.hypernyms[each_elem].add(hypernym)
+                    self.hypernyms[each_elem].add(hypernym.name())
 
                 temp_hyponyms = each_elem.hyponyms()
                 for hyponyms in temp_hyponyms:
-                    self.hyponyms[each_elem].add(hyponyms)
+                    self.hyponyms[each_elem].add(hyponyms.name())
 
                 temp_meronyms = each_elem.part_meronyms()
                 for meronyms in temp_meronyms:
-                    self.meronyms[each_elem].add(meronyms)
+                    self.meronyms[each_elem].add(meronyms.name())
                 temp_meronyms = each_elem.substance_meronyms()
                 for meronyms in temp_meronyms:
-                    self.meronyms[each_elem].add(meronyms)
+                    self.meronyms[each_elem].add(meronyms.name())
 
                 temp_holonyms = each_elem.part_holonyms()
                 for holonyms in temp_holonyms:
-                    self.holonyms[each_elem].add(holonyms)
+                    self.holonyms[each_elem].add(holonyms.name())
                 temp_holonyms = each_elem.substance_holonyms()
                 for holonyms in temp_holonyms:
-                    self.holonyms[each_elem].add(holonyms)
+                    self.holonyms[each_elem].add(holonyms.name())
+        if do_print:
+            print("\nSynsets\t", "--" * 10)
+            for key in self.synsets:
+                print(key, self.synsets[key])
 
-        print("\nSynsets\t", "--" * 10)
-        for key in self.synsets:
-            print(key, self.synsets[key])
+            print("\n\nHypernyms\t", "--" * 10)
+            for key in self.hypernyms:
+                print(key, self.hypernyms[key])
 
-        print("\n\nHypernyms\t", "--" * 10)
-        for key in self.hypernyms:
-            print(key, self.hypernyms[key])
+            print("\n\nHyponyms\t", "--" * 10)
+            for key in self.meronyms:
+                print(key, self.meronyms[key])
 
-        print("\n\nHyponyms\t", "--" * 10)
-        for key in self.meronyms:
-            print(key, self.meronyms[key])
-
-        print("\n\nHolonyms\t", "--" * 10)
-        for key in self.holonyms:
-            print(key, self.holonyms[key])
+            print("\n\nHolonyms\t", "--" * 10)
+            for key in self.holonyms:
+                print(key, self.holonyms[key])
 
     def parse_tree(self, sentence):
         nlp = spacy.load("en_core_web_sm")
@@ -119,7 +120,7 @@ class PreProcessData:
 
 
 if __name__ == "__main__":
-    preProcessData = PreProcessData()
+    preProcessData = PreProcessData("")
     while True:
         print("Choose from the following options:")
         print("1. Tokenize sentence")
@@ -139,6 +140,6 @@ if __name__ == "__main__":
             elif option == 4:
                 print(preProcessData.parse_tree(sentence))
             elif option == 5:
-                print(preProcessData.wordnet_features(sentence))
+                print(preProcessData.wordnet_features(sentence, True))
         else:
             print("Please select the correct option")
