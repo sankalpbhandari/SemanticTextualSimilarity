@@ -19,6 +19,7 @@ class PreProcessData:
         self.data = data
 
     def preprocess_data(self):
+        print("Data Preprocessing")
         for index in range(len(self.data)):
             data = self.data[index]
             sent1_nopunch = data[1].translate(str.maketrans('', '', string.punctuation)).lower()

@@ -3,9 +3,11 @@ from time import time
 import pandas as pd
 from gensim import corpora
 from gensim.similarities import Similarity
+from joblib import dump, load
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from nltk.corpus import wordnet
+from sklearn.svm import SVR
 
 from PreprocessData import PreProcessData
 
@@ -196,9 +198,10 @@ class STSModel:
         self.jaccard_similarity_only_synset()
         self.jaccard_similarity_no_syn()
         self.sentence_similarity()
-        self.model()
         self.compare_sentence()
         self.relative_length()
+        self.pos_relative_length()
+        self.model()
 
     def compare_sentence(self):
         print("Compare two sentences")
@@ -213,9 +216,66 @@ class STSModel:
             length.append(min(len(data[1]), len(data[2])) / max(len(data[1]), len(data[2])))
         self.feature['relative_length'] = length
 
+    def pos_relative_length(self):
+        print("Calculating relative length of POS Tags")
+        s, adj, adv, verb, noun = [], [], [], [], []
+        for data in self.data:
+            s1 = pos1 = data[1]
+            s2 = pos2 = data[2]
+            t1 = abs(len(s1) - len(s2)) / float(len(s1) + len(s2))
+            cnt1 = len([1 for item in pos1 if item[1].startswith('J')])
+            cnt2 = len([1 for item in pos2 if item[1].startswith('J')])
+            if cnt1 == 0 and cnt2 == 0:
+                t2 = 0
+            else:
+                t2 = abs(cnt1 - cnt2) / float(cnt1 + cnt2)
+            # all adverbs
+            cnt1 = len([1 for item in pos1 if item[1].startswith('R')])
+            cnt2 = len([1 for item in pos2 if item[1].startswith('R')])
+            if cnt1 == 0 and cnt2 == 0:
+                t3 = 0
+            else:
+                t3 = abs(cnt1 - cnt2) / float(cnt1 + cnt2)
+            # all nouns
+            cnt1 = len([1 for item in pos1 if item[1].startswith('N')])
+            cnt2 = len([1 for item in pos2 if item[1].startswith('N')])
+            if cnt1 == 0 and cnt2 == 0:
+                t4 = 0
+            else:
+                t4 = abs(cnt1 - cnt2) / float(cnt1 + cnt2)
+            # all verbs
+            cnt1 = len([1 for item in pos1 if item[1].startswith('V')])
+            cnt2 = len([1 for item in pos2 if item[1].startswith('V')])
+            if cnt1 == 0 and cnt2 == 0:
+                t5 = 0
+            else:
+                t5 = abs(cnt1 - cnt2) / float(cnt1 + cnt2)
+            s.append(t1)
+            adj.append(t2)
+            adv.append(t3)
+            noun.append(t4)
+            verb.append(t5)
+
+        self.feature['sent_pos_score'] = s
+        self.feature['adj_pos_score'] = adj
+        self.feature['adv_pos_score'] = adv
+        self.feature['noun_pos_score'] = noun
+        self.feature['verb_pos_score'] = verb
+
     def model(self):
+        clf = SVR(kernel='linear')
+        labels = self.feature['label']
+        X_features = self.feature.drop(["id", "label"], axis=1)
+        clf = load('filename.joblib')
+        res = clf.predict(X_features)
+        print(res)
+        with open('abc.csv', 'w') as f:
+            for item in res:
+                f.write("%s\n" % item)
+        # clf.fit(X_features, labels)
+        # dump(clf, 'filename.joblib')
         fig, ax = plt.subplots()
-        ax.scatter(self.feature['jaccard_sim_no_syn'], self.feature['label'])
+        ax.scatter(self.feature['sent_sim'], self.feature['label'])
         # for i, txt in enumerate(self.feature['label']):
         #     ax.annotate(txt, (self.feature['jaccard_sim'][i], self.feature['cos_sim'][i]))
         pdf = PdfPages(str(time()) + '_abc_new.pdf')
@@ -227,7 +287,7 @@ if __name__ == "__main__":
     # if len(sys.argv) != 2:
     #     print("Please provide the input file only")
     #     exit(0)
-    input_file = "data/dev-set.txt"  # sys.argv[1]
+    input_file = "data/train-set.txt"  # sys.argv[1]
     reader = STSModel(input_file)
     # Task 1
     reader.model_init()
