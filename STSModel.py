@@ -2,7 +2,7 @@ import copy
 import difflib
 from collections import defaultdict
 
-import gensim.downloader as api
+import gensim
 import pandas as pd
 import sklearn
 from gensim import corpora
@@ -214,17 +214,24 @@ class STSModel:
         return [w for w in sentence.lower().split() if w not in self.preprocessdata_o.stopwords]
 
     def wmd_similarity(self):
-        model = api.load('word2vec-google-news-300')
+        print("Calculating word mover distance")
+        model = gensim.models.KeyedVectors.load_word2vec_format('GoogleNews-vectors-negative300.bin', binary=True)
         model.init_sims(replace=True)
         distance = []
+        print("Model loaded")
         for data in self.orig_sent:
             s1 = self.preprocess(data[1])
             s2 = self.preprocess(data[2])
             dist = model.wmdistance(s1, s2)
-            distance.append(dist)
+            if dist == float('inf'):
+                print("Here")
+                dist = 5
+            distance.append(round(dist, 4))
         self.feature['wmd_similarity'] = distance
 
     def sentence_similarity_simple_baseline(self):
+        print("Calculating baseline sentence similarity")
+
         def embedding_count(s):
             ret_embedding = defaultdict(int)
             for w in s.split():
@@ -266,6 +273,90 @@ class STSModel:
         for data in self.data:
             length.append(min(len(data[1]), len(data[2])) / max(len(data[1]), len(data[2])))
         self.feature['relative_length'] = length
+
+    def parse_tree_feature(self):
+        print("Extracting parse tree features")
+        parse_root = []
+        parse_nsubj = []
+        parse_dobj = []
+        for data in self.orig_sent:
+            s1 = data[1].replace(".", "")
+            s2 = data[2].replace(".", "")
+            tree1 = self.preprocessdata_o.parse_tree(s1, True)
+            tree2 = self.preprocessdata_o.parse_tree(s2, True)
+            nsubj1, dobj1, nsubj2, dobj2 = [], [], [], []
+            root1, root2 = "", ""
+            for token in tree1:
+                if token.dep_ == 'ROOT':
+                    root1 = token
+                if token.dep_ == 'nsubj':
+                    nsubj1.append(token)
+                    nsubj1 += token.children
+                if token.dep_ == 'dobj':
+                    dobj1.append(token)
+                    dobj1 += token.children
+
+            for token in tree2:
+                if token.dep_ == 'ROOT':
+                    root2 = token
+                if token.dep_ == 'nsubj':
+                    nsubj2.append(token)
+                    nsubj2 += token.children
+                if token.dep_ == 'dobj':
+                    dobj2.append(token)
+                    dobj2 += token.children
+
+            syn_root1 = self.get_synset(root1, 'v')
+            syn_root2 = self.get_synset(root2, 'v')
+            syn_nsubj1 = []
+            for w in nsubj1:
+                syn_nsubj1.append(self.get_synset(w, 'n'))
+            syn_nsubj2 = []
+            for w in nsubj2:
+                syn_nsubj2.append(self.get_synset(w, 'n'))
+            syn_dobj1 = []
+            for w in dobj1:
+                syn_dobj1.append(self.get_synset(w, 'n'))
+            syn_dobj2 = []
+            for w in dobj2:
+                syn_dobj2.append(self.get_synset(w, 'n'))
+
+            nsub_score = self.get_best_score(syn_nsubj1, syn_nsubj2)
+            dobj_score = self.get_best_score(syn_dobj1, syn_dobj2)
+            root_score = self.get_best_score([syn_root1], [syn_root2])
+
+            parse_root.append(root_score)
+            parse_dobj.append(dobj_score)
+            parse_nsubj.append(nsub_score)
+        self.feature['parse_nsubj'] = parse_nsubj
+        self.feature['parse_dobj'] = parse_dobj
+        self.feature['parse_root'] = parse_root
+
+    def get_best_score(self, s1, s2):
+        synsets1 = [ss for ss in s1 if ss]
+        synsets2 = [ss for ss in s2 if ss]
+
+        score, count = 0.0, 0
+
+        for synset in synsets1:
+            temp = []
+            for ss in synsets2:
+                if synset.path_similarity(ss):
+                    temp.append(synset.wup_similarity(ss))
+            best_score = max(temp) if temp else 0
+
+            if best_score:
+                score += best_score
+                count += 1
+
+        score = score / count if count else 0
+        return score
+
+    def get_synset(self, w, tag):
+        try:
+            return wordnet.synsets(w, tag)[0]
+        except Exception:
+            return None
 
     def pos_relative_length(self):
         print("Calculating relative length of POS Tags")
@@ -327,7 +418,6 @@ class STSModel:
             scaler.fit(X_features)
             X_features_x = scaler.transform(X_features)
             res = random_forest.predict(X_features_x)
-            print(res)
             with open('abc.csv', 'w') as f:
                 for i in range(len(res)):
                     f.write("{}\t{}\n".format(ids[i], int(round(res[i]))))
@@ -355,9 +445,9 @@ if __name__ == "__main__":
     # if len(sys.argv) != 2:
     #     print("Please provide the input file only")
     #     exit(0)
-    input_file = "data/train-set.txt"  # sys.argv[1]
+    input_file = "data/dev-set.txt"  # sys.argv[1]
     reader = STSModel(input_file)
     # Task 1
     reader.model_init()
     # reader.train('train.csv', False)
-    print(reader.feature)
+    print(reader.res)

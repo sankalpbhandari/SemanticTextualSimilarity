@@ -114,9 +114,11 @@ class PreProcessData:
             for key in self.holonyms:
                 print(key, self.holonyms[key])
 
-    def parse_tree(self, sentence):
+    def parse_tree(self, sentence, get_parse_tree=False):
         nlp = spacy.load("en_core_web_sm")
         doc = nlp(sentence)
+        if get_parse_tree:
+            return doc
         spacy.displacy.serve(doc, style="dep")
 
 
