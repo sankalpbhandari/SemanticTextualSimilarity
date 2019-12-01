@@ -207,8 +207,10 @@ class STSModel:
         self.pos_relative_length()
         self.sentence_similarity_simple_baseline()
         self.wmd_similarity()
+        self.pos_similarity()
+        self.parse_tree_feature()
         self.feature.to_csv("train.csv")
-        self.model(predict=False)
+        # self.model(predict=False)
 
     def preprocess(self, sentence):
         return [w for w in sentence.lower().split() if w not in self.preprocessdata_o.stopwords]
@@ -274,12 +276,69 @@ class STSModel:
             length.append(min(len(data[1]), len(data[2])) / max(len(data[1]), len(data[2])))
         self.feature['relative_length'] = length
 
+    def pos_similarity(self):
+        print("POS tag feature extraction")
+        pos_noun, pos_verb, pos_adj, pos_adv = [], [], [], []
+        for data in self.data:
+            verb1, verb2, noun1, noun2, adj1, adj2, adv1, adv2 = [], [], [], [], [], [], [], []
+            pos1 = {'V': verb1, 'N': noun1, 'J': adj1, 'R': adv1}
+            for word, tag in data[1]:
+                if tag[0] in pos1.keys():
+                    pos1[tag[0]].append(word)
+            pos2 = {'V': verb2, 'N': noun2, 'J': adj2, 'R': adv2}
+            for word, tag in data[2]:
+                if tag[0] in pos2.keys():
+                    pos2[tag[0]].append(word)
+            pn1, pn2, pv1, pv2, pr1, pr2, pj1, pj2 = [], [], [], [], [], [], [], []
+            for w in pos1['N']:
+                syn = self.get_synset(w, 'n')
+                if syn:
+                    pn1.append(syn)
+            for w in pos1['V']:
+                syn = self.get_synset(w, 'v')
+                if syn:
+                    pv1.append(syn)
+            for w in pos1['J']:
+                syn = self.get_synset(w, 'a')
+                if syn:
+                    pj1.append(syn)
+            for w in pos1['R']:
+                syn = self.get_synset(w, 'r')
+                if syn:
+                    pr1.append(syn)
+
+            for w in pos2['N']:
+                syn = self.get_synset(w, 'n')
+                if syn:
+                    pn2.append(syn)
+            for w in pos2['V']:
+                syn = self.get_synset(w, 'v')
+                if syn:
+                    pv2.append(syn)
+            for w in pos2['J']:
+                syn = self.get_synset(w, 'a')
+                if syn:
+                    pj2.append(syn)
+            for w in pos2['R']:
+                syn = self.get_synset(w, 'r')
+                if syn:
+                    pr2.append(syn)
+            pos_noun.append(self.get_best_score(pn1, pn2))
+            pos_verb.append(self.get_best_score(pv1, pv2))
+            pos_adj.append(self.get_best_score(pj1, pj2))
+            pos_adv.append(self.get_best_score(pr1, pr2))
+        self.feature['pos_noun'] = pos_noun
+        self.feature['pos_verb'] = pos_verb
+        self.feature['pos_adj'] = pos_adj
+        self.feature['pos_adv'] = pos_adv
+
     def parse_tree_feature(self):
         print("Extracting parse tree features")
         parse_root = []
         parse_nsubj = []
         parse_dobj = []
         for data in self.orig_sent:
+            print(data[0])
             s1 = data[1].replace(".", "")
             s2 = data[2].replace(".", "")
             tree1 = self.preprocessdata_o.parse_tree(s1, True)
@@ -289,37 +348,51 @@ class STSModel:
             for token in tree1:
                 if token.dep_ == 'ROOT':
                     root1 = token
+                    break
+            for token in tree1:
                 if token.dep_ == 'nsubj':
                     nsubj1.append(token)
                     nsubj1 += token.children
+                    break
+            for token in tree1:
                 if token.dep_ == 'dobj':
                     dobj1.append(token)
                     dobj1 += token.children
+                    break
 
             for token in tree2:
                 if token.dep_ == 'ROOT':
                     root2 = token
+                    break
+            for token in tree2:
                 if token.dep_ == 'nsubj':
                     nsubj2.append(token)
                     nsubj2 += token.children
+                    break
+            for token in tree2:
                 if token.dep_ == 'dobj':
                     dobj2.append(token)
                     dobj2 += token.children
+                    break
 
             syn_root1 = self.get_synset(root1, 'v')
             syn_root2 = self.get_synset(root2, 'v')
             syn_nsubj1 = []
             for w in nsubj1:
-                syn_nsubj1.append(self.get_synset(w, 'n'))
+                if w not in self.preprocessdata_o.stopwords:
+                    syn_nsubj1.append(self.get_synset(w, 'n'))
             syn_nsubj2 = []
             for w in nsubj2:
-                syn_nsubj2.append(self.get_synset(w, 'n'))
+                if w not in self.preprocessdata_o.stopwords:
+                    syn_nsubj2.append(self.get_synset(w, 'n'))
             syn_dobj1 = []
             for w in dobj1:
-                syn_dobj1.append(self.get_synset(w, 'n'))
+                if w not in self.preprocessdata_o.stopwords:
+                    syn_dobj1.append(self.get_synset(w, 'n'))
             syn_dobj2 = []
             for w in dobj2:
-                syn_dobj2.append(self.get_synset(w, 'n'))
+                if w not in self.preprocessdata_o.stopwords:
+                    syn_dobj2.append(self.get_synset(w, 'n'))
 
             nsub_score = self.get_best_score(syn_nsubj1, syn_nsubj2)
             dobj_score = self.get_best_score(syn_dobj1, syn_dobj2)
@@ -445,7 +518,7 @@ if __name__ == "__main__":
     # if len(sys.argv) != 2:
     #     print("Please provide the input file only")
     #     exit(0)
-    input_file = "data/dev-set.txt"  # sys.argv[1]
+    input_file = "data/train-set.txt"  # sys.argv[1]
     reader = STSModel(input_file)
     # Task 1
     reader.model_init()
