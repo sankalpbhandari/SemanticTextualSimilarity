@@ -209,8 +209,8 @@ class STSModel:
         self.wmd_similarity()
         self.pos_similarity()
         self.parse_tree_feature()
-        self.feature.to_csv("train.csv")
-        # self.model(predict=False)
+        self.feature.to_csv("dev.csv")
+        self.model(predict=True)
 
     def preprocess(self, sentence):
         return [w for w in sentence.lower().split() if w not in self.preprocessdata_o.stopwords]
@@ -486,7 +486,7 @@ class STSModel:
         ids = self.feature["id"]
         X_features = self.feature.drop(["id", "label"], axis=1)
         if predict:
-            random_forest = load('filename.joblib')
+            random_forest = load('STSModel.joblib')
             scaler = sklearn.preprocessing.StandardScaler()
             scaler.fit(X_features)
             X_features_x = scaler.transform(X_features)
@@ -503,7 +503,7 @@ class STSModel:
             scaler.fit(X_features)
             X_features_x = scaler.transform(X_features)
             random_forest.fit(X_features_x, labels)
-            dump(random_forest, 'filename.joblib')
+            dump(random_forest, 'STSModel.joblib')
             # print(clf.coef_.ravel())
         # fig, ax = plt.subplots()
         # ax.scatter(self.feature['sent_sim'], self.feature['label'])
@@ -518,7 +518,7 @@ if __name__ == "__main__":
     # if len(sys.argv) != 2:
     #     print("Please provide the input file only")
     #     exit(0)
-    input_file = "data/train-set.txt"  # sys.argv[1]
+    input_file = "data/dev-set.txt"  # sys.argv[1]
     reader = STSModel(input_file)
     # Task 1
     reader.model_init()
