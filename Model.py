@@ -45,11 +45,20 @@ class Model:
             dump(random_forest, 'STSModel.joblib')
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print("Please provide the Feature file, result output file and 'train' or 'predict'")
-        exit(0)
-    inputfile = sys.argv[1]
-    predict = sys.argv[3].strip().lower() == 'predict'
-    output_file = sys.argv[2]
+    predict = sys.argv[1].strip().lower() == 'predict'
+    output_file = ""
+    if predict:
+        if len(sys.argv) != 4:
+            print("Please provide 'train' or 'predict', the Feature file, and result output file")
+            exit(0)
+        else:
+            input_file = sys.argv[2]
+            output_file = sys.argv[3]
+    else:
+        if len(sys.argv) != 3:
+            print("Please provide 'train' or 'predict' and feature file the Feature file")
+            exit(0)
+        else:
+            input_file = sys.argv[2]
     model_o = Model()
-    model_o.model(inputfile, output_file, predict)
+    model_o.model(input_file, output_file, predict)
