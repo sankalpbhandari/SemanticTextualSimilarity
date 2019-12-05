@@ -1,15 +1,13 @@
 import copy
 import difflib
+import sys
 from collections import defaultdict
 
 import gensim
 import pandas as pd
-import sklearn
 from gensim import corpora
 from gensim.similarities import Similarity
-from joblib import dump, load
 from nltk.corpus import wordnet
-from sklearn.ensemble import RandomForestClassifier
 
 from PreprocessData import PreProcessData
 
@@ -26,9 +24,11 @@ class STSModel:
         label = []
         for data in self.data:
             sent_id.append(data[0])
-            label.append(data[3])
+            if len(data) == 4:
+                label.append(data[3])
         self.feature = pd.DataFrame(sent_id, columns=["id"])
-        self.feature["label"] = label
+        if len(label) > 0:
+            self.feature["label"] = label
 
     def read_data(self, input_file):
         print("Reading Data from file")
@@ -193,7 +193,7 @@ class STSModel:
             sent_sim.append(score)
         self.feature["sent_sim"] = sent_sim
 
-    def model_init(self):
+    def model_init(self, output_file):
         self.data = self.preprocessdata_o.preprocess_data()
         self.cosine_similarity_with_syn()
         self.cosine_similarity_no_syn()
@@ -209,8 +209,7 @@ class STSModel:
         self.wmd_similarity()
         self.pos_similarity()
         self.parse_tree_feature()
-        self.feature.to_csv("dev.csv")
-        self.model(predict=True)
+        self.feature.to_csv(output_file)
 
     def preprocess(self, sentence):
         return [w for w in sentence.lower().split() if w not in self.preprocessdata_o.stopwords]
@@ -226,7 +225,6 @@ class STSModel:
             s2 = self.preprocess(data[2])
             dist = model.wmdistance(s1, s2)
             if dist == float('inf'):
-                print("Here")
                 dist = 5
             distance.append(round(dist, 4))
         self.feature['wmd_similarity'] = distance
@@ -258,10 +256,6 @@ class STSModel:
                 ret_score = sm.ratio() * 5
             sent_baseline.append(ret_score)
         self.feature['sent_baseline'] = sent_baseline
-
-    def train(self, file, a):
-        self.feature = pd.read_csv(file)
-        self.model(a)
 
     def compare_sentence(self):
         print("Compare two sentences")
@@ -427,7 +421,7 @@ class STSModel:
 
     def get_synset(self, w, tag):
         try:
-            return wordnet.synsets(w, tag)[0]
+            return wordnet.synsets(str(w), tag)[0]
         except Exception:
             return None
 
@@ -479,48 +473,13 @@ class STSModel:
         self.feature['noun_pos_score'] = noun_l
         self.feature['verb_pos_score'] = verb_l
 
-    def model(self, predict):
-        random_forest = RandomForestClassifier(250)
-        # random_forest = SVR(kernel='linear')
-        labels = [int(i) for i in self.feature['label'].tolist()]
-        ids = self.feature["id"]
-        X_features = self.feature.drop(["id", "label"], axis=1)
-        if predict:
-            random_forest = load('STSModel.joblib')
-            scaler = sklearn.preprocessing.StandardScaler()
-            scaler.fit(X_features)
-            X_features_x = scaler.transform(X_features)
-            res = random_forest.predict(X_features_x)
-            with open('abc.csv', 'w') as f:
-                for i in range(len(res)):
-                    f.write("{}\t{}\n".format(ids[i], int(round(res[i]))))
-            with open('gold.csv', 'w') as f:
-                for i in range(len(res)):
-                    f.write("{}\t{}\n".format(ids[i], labels[i]))
-            print(labels)
-        else:
-            scaler = sklearn.preprocessing.StandardScaler()
-            scaler.fit(X_features)
-            X_features_x = scaler.transform(X_features)
-            random_forest.fit(X_features_x, labels)
-            dump(random_forest, 'STSModel.joblib')
-            # print(clf.coef_.ravel())
-        # fig, ax = plt.subplots()
-        # ax.scatter(self.feature['sent_sim'], self.feature['label'])
-        # for i, txt in enumerate(self.feature['label']):
-        #     ax.annotate(txt, (self.feature['jaccard_sim'][i], self.feature['cos_sim'][i]))
-        # pdf = PdfPages(str(time()) + '_abc_new.pdf')
-        # pdf.savefig(fig)
-        # pdf.close()
-
 
 if __name__ == "__main__":
-    # if len(sys.argv) != 2:
-    #     print("Please provide the input file only")
-    #     exit(0)
-    input_file = "data/dev-set.txt"  # sys.argv[1]
+    if len(sys.argv) != 3:
+        print("Please provide the input file and output file only")
+        exit(0)
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
     reader = STSModel(input_file)
-    # Task 1
-    reader.model_init()
-    # reader.train('train.csv', False)
-    print(reader.res)
+    reader.model_init(output_file)
+    print("Features extracted and stored at ", output_file)
