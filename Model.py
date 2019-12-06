@@ -12,7 +12,7 @@ class Model:
 
     def model(self, file, output, predict):
         self.feature = pd.read_csv(file)
-        random_forest = RandomForestClassifier(1000)
+        random_forest = RandomForestClassifier(300)
         labels = []
         try:
             labels = [int(i) for i in self.feature['label'].tolist()]
